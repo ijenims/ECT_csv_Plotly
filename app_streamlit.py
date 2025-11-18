@@ -4,8 +4,8 @@ import plotly.graph_objects as go
 import streamlit as st
 
 # ページ設定
-st.set_page_config(page_title="2ch CSV Viewer", layout="wide")
-st.title("2ch CSV Plotter（Streamlit版）")
+st.set_page_config(page_title="CSV Viewer", layout="wide")
+st.title("CSV Plotter（Streamlit版）")
 
 st.write("CSVファイルをアップロードすると、2ch分の時系列データをPlotlyで可視化するで💅")
 
