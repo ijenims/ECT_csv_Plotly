@@ -4,8 +4,8 @@ import plotly.graph_objects as go
 import streamlit as st
 
 # ページ設定
-st.set_page_config(page_title="CSV Viewer", layout="wide")
-st.title("CSV Plotter（Streamlit版）")
+st.set_page_config(page_title="2ch CSV Viewer", layout="wide")
+st.title("2ch CSV Plotter（Streamlit版）")
 
 st.write("CSVファイルをアップロードすると、2ch分の時系列データをPlotlyで可視化するで💅")
 
@@ -78,7 +78,128 @@ if uploaded_file is not None:
             height=600,
         )
 
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
+
+                # ▼▼▼ ここから XY 散布図用のUIと描画 ▼▼▼
+
+        # セッションにXYの使用範囲がなければデフォルトをセット
+        if "xy_range" not in st.session_state:
+            st.session_state["xy_range"] = (0, len(df_data) - 1)
+
+        st.markdown("---")
+        st.subheader("XY 散布図（データX vs データY）")
+
+        # 現在の範囲を取得
+        current_start, current_end = st.session_state["xy_range"]
+
+        # 使用可能なインデックス範囲
+        max_idx = len(df_data) - 1
+
+        col1, col2, col3 = st.columns([1, 1, 1])
+
+        with col1:
+            start_idx = st.number_input(
+                "開始インデックス (start)",
+                min_value=0,
+                max_value=max_idx,
+                value=int(current_start),
+                step=1,
+            )
+
+        with col2:
+            end_idx = st.number_input(
+                "終了インデックス (end)",
+                min_value=0,
+                max_value=max_idx,
+                value=int(current_end),
+                step=1,
+            )
+
+        with col3:
+            redraw = st.button("XYグラフ再描画", use_container_width=True)
+
+        # ボタンが押されたときだけ範囲を更新
+        if redraw:
+            # start > end になったときのガード（小さい方をstartにする）
+            s = int(min(start_idx, end_idx))
+            e = int(max(start_idx, end_idx))
+            st.session_state["xy_range"] = (s, e)
+            current_start, current_end = s, e
+
+        # 実際に使うインデックス範囲
+        s, e = st.session_state["xy_range"]
+
+        # 範囲をクリップ（念のため）
+        s = max(0, min(s, max_idx))
+        e = max(0, min(e, max_idx))
+
+        # 時系列で選んだ区間を切り出し（フル）
+        df_slice_full = df_data.iloc[s : e + 1]
+
+        # XY描画用に間引き（ここでは10点に1点）
+        df_slice = df_slice_full.iloc[::10]
+
+
+        # 列名を特定（データY, データX を優先）
+        try:
+            y_col = "データY"
+            x_col = "データX"
+            _ = df_slice[[x_col, y_col]]  # 存在チェック
+        except Exception:
+            # 万一名前違っても、0列目→Y, 1列目→X とみなす
+            y_col = df_slice.columns[0]
+            x_col = df_slice.columns[1]
+
+        # XY散布図を作成
+        # ---- XY 散布図 ----
+
+        fig_xy = go.Figure()
+
+        fig_xy.add_trace(
+            go.Scattergl(
+                x=df_slice[x_col],
+                y=df_slice[y_col],
+                mode="markers",
+                marker=dict(size=3, opacity=0.1),
+            )
+        )
+
+        # ▼ x軸
+        fig_xy.update_xaxes(
+            title=x_col,
+            range=[-5, 5],
+            dtick=1,                  # グリッド間隔（1刻み）
+            showgrid=True,            # グリッド線 ON
+            gridcolor="#CCCCCC",      # ← 濃い目の灰色（絶対見える）
+            zeroline=True,
+            zerolinecolor="#999999",
+        )
+
+        # ▼ y軸
+        fig_xy.update_yaxes(
+            title=y_col,
+            range=[-2.5, 2.5],
+            dtick=0.5,                # x と同数になるよう 0.5刻み
+            showgrid=True,
+            gridcolor="#CCCCCC",
+            zeroline=True,
+            zerolinecolor="#999999",
+        )
+
+        # ▼ 正方形で表示（縦横比1:1）
+        fig_xy.update_layout(
+            width=600,
+            height=600,
+            margin=dict(l=50, r=20, t=40, b=40),
+        )
+
+        # Plot
+        st.plotly_chart(fig_xy, width="content")
+
+
+
+        # ▲▲▲ ここまで XY 散布図関連 ▲▲▲
+
 
     except Exception:
         st.error("読み込み失敗しました😂（CSVフォーマット or 文字コードを確認してな〜）")
