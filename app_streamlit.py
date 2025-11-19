@@ -80,20 +80,39 @@ if uploaded_file is not None:
 
         st.plotly_chart(fig, width="stretch")
 
-                # ▼▼▼ ここから XY 散布図用のUIと描画 ▼▼▼
-
-        # セッションにXYの使用範囲がなければデフォルトをセット
-        if "xy_range" not in st.session_state:
-            st.session_state["xy_range"] = (0, len(df_data) - 1)
-
-        st.markdown("---")
-        st.subheader("XY 散布図（データX vs データY）")
-
-        # 現在の範囲を取得
-        current_start, current_end = st.session_state["xy_range"]
+        # ▼▼▼ ここから XY 用インデックス範囲のUI ▼▼▼
 
         # 使用可能なインデックス範囲
         max_idx = len(df_data) - 1
+
+        # 「候補範囲」と「適用範囲」をセッションに保持
+        if "xy_candidate" not in st.session_state:
+            st.session_state["xy_candidate"] = (0, max_idx)  # スライダ＆手入力用
+        if "xy_range" not in st.session_state:
+            st.session_state["xy_range"] = (0, max_idx)      # 実際にXY描画に使う範囲
+
+        cand_start, cand_end = st.session_state["xy_candidate"]
+
+        st.markdown("### XY グラフ用インデックス範囲（スライダー）")
+
+        # 時系列グラフの x 軸と同じ 0～max_idx を使う 2 ハンドルスライダー
+        cand_start, cand_end = st.slider(
+            "時系列グラフ上のインデックス範囲",
+            min_value=0,
+            max_value=max_idx,
+            value=(int(cand_start), int(cand_end)),
+            key="xy_slider",
+        )
+
+        # スライダーで動かした結果を候補範囲として保存
+        st.session_state["xy_candidate"] = (int(cand_start), int(cand_end))
+
+        st.markdown("---")
+        st.subheader("XY グラフ（データX vs データY）")
+
+
+        # いまの「候補範囲」を取得（スライダー or 手入力で編集される値）
+        cand_start, cand_end = st.session_state["xy_candidate"]
 
         col1, col2, col3 = st.columns([1, 1, 1])
 
@@ -102,8 +121,9 @@ if uploaded_file is not None:
                 "開始インデックス (start)",
                 min_value=0,
                 max_value=max_idx,
-                value=int(current_start),
+                value=int(cand_start),
                 step=1,
+                key="xy_start",
             )
 
         with col2:
@@ -111,20 +131,25 @@ if uploaded_file is not None:
                 "終了インデックス (end)",
                 min_value=0,
                 max_value=max_idx,
-                value=int(current_end),
+                value=int(cand_end),
                 step=1,
+                key="xy_end",
             )
 
         with col3:
             redraw = st.button("XYグラフ再描画", use_container_width=True)
 
-        # ボタンが押されたときだけ範囲を更新
+        # 手入力の内容で候補範囲を更新（スライダーと手入力のどっちで変えてもOK）
+        cand_start = int(start_idx)
+        cand_end = int(end_idx)
+        st.session_state["xy_candidate"] = (cand_start, cand_end)
+
+        # ボタンが押されたときだけ「適用範囲」を更新
         if redraw:
-            # start > end になったときのガード（小さい方をstartにする）
-            s = int(min(start_idx, end_idx))
-            e = int(max(start_idx, end_idx))
+            s = int(min(cand_start, cand_end))
+            e = int(max(cand_start, cand_end))
             st.session_state["xy_range"] = (s, e)
-            current_start, current_end = s, e
+
 
         # 実際に使うインデックス範囲
         s, e = st.session_state["xy_range"]
