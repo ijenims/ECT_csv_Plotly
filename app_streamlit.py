@@ -4,13 +4,13 @@ import plotly.graph_objects as go
 import streamlit as st
 
 # ページ設定
-st.set_page_config(page_title="2ch CSV Viewer", layout="wide")
-st.title("2ch CSV Plotter（Streamlit版）")
+st.set_page_config(page_title="CSV Viewer", layout="wide")
+st.title("Eddy CSV Plotter")
 
-st.write("CSVファイルをアップロードすると、2ch分の時系列データをPlotlyで可視化するで💅")
+st.write("EddyHLで作成したCSVファイルをアップロードすると、時系列グラフとXYグラフで可視化できます")
 
 # ファイルアップローダ
-uploaded_file = st.file_uploader("CSVファイルを選択してな〜", type=["csv"])
+uploaded_file = st.file_uploader("CSVファイルを選択", type=["csv"])
 
 def load_csv(file) -> pd.DataFrame:
     """N23.csv 形式のCSVを確実に読むやつ（Shift-JIS対応）"""
@@ -58,7 +58,7 @@ if uploaded_file is not None:
         # 読み込み
         df_data = load_csv(uploaded_file)
 
-        st.success("CSV読み込み完了したで👌")
+        st.success("CSV読み込み完了👌")
 
         # Plotlyで2ch重ね描画
         fig = go.Figure()
@@ -202,7 +202,7 @@ if uploaded_file is not None:
 
 
     except Exception:
-        st.error("読み込み失敗しました😂（CSVフォーマット or 文字コードを確認してな〜）")
+        st.error("読み込み失敗しました😂（CSVフォーマット or 文字コードを確認して）")
 
 else:
     st.info("上のボックスからCSVをアップロードするとグラフ出るで📈")
