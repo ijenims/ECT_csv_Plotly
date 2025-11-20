@@ -12,6 +12,7 @@ st.write("EddyHLで作成したCSVファイルをアップロードすると、�
 # ファイルアップローダ
 uploaded_file = st.file_uploader("CSVファイルを選択", type=["csv"])
 
+
 def load_csv(file) -> pd.DataFrame:
     """N23.csv 形式のCSVを確実に読むやつ（Shift-JIS対応）"""
 
@@ -54,13 +55,21 @@ def load_csv(file) -> pd.DataFrame:
 
 
 if uploaded_file is not None:
+    # ▼ 新しいファイルがアップロードされたら state 全部リセット（パターンA）
+    file_id = (uploaded_file.name, uploaded_file.size)
+
+    if st.session_state.get("last_file_id") != file_id:
+        # いったん全部クリア
+        st.session_state.clear()
+        # 今回のファイル情報だけ保存し直す
+        st.session_state["last_file_id"] = file_id
+
     try:
-        # 読み込み
         df_data = load_csv(uploaded_file)
 
         st.success("CSV読み込み完了👌")
 
-        # Plotlyで2ch重ね描画
+        # ========= 時系列グラフ =========
         fig = go.Figure()
 
         for col in df_data.columns:
@@ -80,90 +89,48 @@ if uploaded_file is not None:
 
         st.plotly_chart(fig, width="stretch")
 
-        # ▼▼▼ ここから XY 用インデックス範囲のUI ▼▼▼
 
-        # 使用可能なインデックス範囲
+        # ========= XY 用インデックス範囲（スライダーのみ） =========
+
         max_idx = len(df_data) - 1
 
-        # 「候補範囲」と「適用範囲」をセッションに保持
-        if "xy_candidate" not in st.session_state:
-            st.session_state["xy_candidate"] = (0, max_idx)  # スライダ＆手入力用
-        if "xy_range" not in st.session_state:
-            st.session_state["xy_range"] = (0, max_idx)      # 実際にXY描画に使う範囲
+        # 再描画に実際使う範囲（ボタン押下時だけ更新）
+        if "xy_range_applied" not in st.session_state:
+            st.session_state["xy_range_applied"] = (0, max_idx)
 
-        cand_start, cand_end = st.session_state["xy_candidate"]
+        st.markdown("### XY 用インデックス範囲（スライダー）")
 
-        st.markdown("### XY グラフ用インデックス範囲（スライダー）")
+        # 今適用されている範囲をデフォルト値として使う
+        applied_start, applied_end = st.session_state["xy_range_applied"]
 
-        # 時系列グラフの x 軸と同じ 0～max_idx を使う 2 ハンドルスライダー
-        cand_start, cand_end = st.slider(
+        slider_start, slider_end = st.slider(
             "時系列グラフ上のインデックス範囲",
             min_value=0,
             max_value=max_idx,
-            value=(int(cand_start), int(cand_end)),
+            value=(int(applied_start), int(applied_end)),
             key="xy_slider",
         )
 
-        # スライダーで動かした結果を候補範囲として保存
-        st.session_state["xy_candidate"] = (int(cand_start), int(cand_end))
+        # 再描画ボタン：押したときだけ適用
+        # 適度な幅のカラム（中央寄せ）
+        col_btn, _, _ = st.columns([1, 1, 1])
 
-        st.markdown("---")
-        st.subheader("XY グラフ（データX vs データY）")
-
-
-        # いまの「候補範囲」を取得（スライダー or 手入力で編集される値）
-        cand_start, cand_end = st.session_state["xy_candidate"]
-
-        col1, col2, col3 = st.columns([1, 1, 1])
-
-        with col1:
-            start_idx = st.number_input(
-                "開始インデックス (start)",
-                min_value=0,
-                max_value=max_idx,
-                value=int(cand_start),
-                step=1,
-                key="xy_start",
-            )
-
-        with col2:
-            end_idx = st.number_input(
-                "終了インデックス (end)",
-                min_value=0,
-                max_value=max_idx,
-                value=int(cand_end),
-                step=1,
-                key="xy_end",
-            )
-
-        with col3:
+        with col_btn:
             redraw = st.button("XYグラフ再描画", use_container_width=True)
 
-        # 手入力の内容で候補範囲を更新（スライダーと手入力のどっちで変えてもOK）
-        cand_start = int(start_idx)
-        cand_end = int(end_idx)
-        st.session_state["xy_candidate"] = (cand_start, cand_end)
 
-        # ボタンが押されたときだけ「適用範囲」を更新
         if redraw:
-            s = int(min(cand_start, cand_end))
-            e = int(max(cand_start, cand_end))
-            st.session_state["xy_range"] = (s, e)
+            s = min(slider_start, slider_end)
+            e = max(slider_start, slider_end)
+            st.session_state["xy_range_applied"] = (s, e)
 
-
-        # 実際に使うインデックス範囲
-        s, e = st.session_state["xy_range"]
-
-        # 範囲をクリップ（念のため）
+        # ここから下は「適用済みの範囲」を使ってXY描画
+        s, e = st.session_state["xy_range_applied"]
         s = max(0, min(s, max_idx))
         e = max(0, min(e, max_idx))
 
-        # 時系列で選んだ区間を切り出し（フル）
         df_slice_full = df_data.iloc[s : e + 1]
-
-        # XY描画用に間引き（ここでは10点に1点）
-        df_slice = df_slice_full.iloc[::10]
-
+        df_slice = df_slice_full.iloc[::10]    # 間引き（描画高速化）
 
         # 列名を特定（データY, データX を優先）
         try:
@@ -175,9 +142,7 @@ if uploaded_file is not None:
             y_col = df_slice.columns[0]
             x_col = df_slice.columns[1]
 
-        # XY散布図を作成
-        # ---- XY 散布図 ----
-
+        # ========= XY 散布図 =========
         fig_xy = go.Figure()
 
         fig_xy.add_trace(
@@ -186,21 +151,22 @@ if uploaded_file is not None:
                 y=df_slice[y_col],
                 mode="markers",
                 marker=dict(size=3, opacity=0.1),
+                name=f"{y_col} vs {x_col}",
             )
         )
 
-        # ▼ x軸
+        # x軸（-5〜5、1刻み、縦線見えるようにグリッド色指定）
         fig_xy.update_xaxes(
             title=x_col,
             range=[-5, 5],
             dtick=1,                  # グリッド間隔（1刻み）
             showgrid=True,            # グリッド線 ON
-            gridcolor="#CCCCCC",      # ← 濃い目の灰色（絶対見える）
+            gridcolor="#CCCCCC",      # 濃い目の灰色（見やすい）
             zeroline=True,
             zerolinecolor="#999999",
         )
 
-        # ▼ y軸
+        # y軸（-2.5〜2.5、0.5刻み → グリッド本数をxと合わせる）
         fig_xy.update_yaxes(
             title=y_col,
             range=[-2.5, 2.5],
@@ -211,20 +177,17 @@ if uploaded_file is not None:
             zerolinecolor="#999999",
         )
 
-        # ▼ 正方形で表示（縦横比1:1）
+        # 正方形で表示（縦横比 1:1）
         fig_xy.update_layout(
             width=600,
             height=600,
             margin=dict(l=50, r=20, t=40, b=40),
         )
 
-        # Plot
+        # XY は width="content" でPlotly側サイズをそのまま使う
         st.plotly_chart(fig_xy, width="content")
 
-
-
         # ▲▲▲ ここまで XY 散布図関連 ▲▲▲
-
 
     except Exception:
         st.error("読み込み失敗しました😂（CSVフォーマット or 文字コードを確認して）")
