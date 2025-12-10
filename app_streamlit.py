@@ -14,12 +14,6 @@ st.write("EddyHLで作成したCSVファイルをアップロードすると、�
 uploaded_file = st.file_uploader("CSVファイルを選択", type=["csv"])
 
 
-# 純粋な数値判定（空白・不可視文字も除外）
-def is_number(s):
-    s = str(s).strip()
-    return bool(re.fullmatch(r"-?\d+(\.\d+)?", s))
-
-
 def load_csv(file):
     # CSV をテキストとして読み込む
     raw = file.getvalue().decode("shift_jis", errors="ignore").splitlines()
