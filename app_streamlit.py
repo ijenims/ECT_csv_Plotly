@@ -13,45 +13,45 @@ st.write("EddyHLで作成したCSVファイルをアップロードすると、�
 uploaded_file = st.file_uploader("CSVファイルを選択", type=["csv"])
 
 
-def load_csv(file) -> pd.DataFrame:
-    """N23.csv 形式のCSVを確実に読むやつ（Shift-JIS対応）"""
+def load_csv(file):
+    """
+    EddyHL形式のCSVを自動解析して読み込む。
+    ・Shift-JIS対応
+    ・ヘッダ行数が可変でもOK（数値行を自動検出）
+    """
+    # まず先頭10行だけ読む
+    head = pd.read_csv(file, encoding="shift_jis", nrows=10, header=None)
 
-    # 念のため先頭に戻す
-    try:
-        file.seek(0)
-    except Exception:
-        pass
+    data_start = None
 
-    # バイト取得
-    content = file.read()
+    # 数値行の検出
+    for i in range(len(head)):
+        row = head.iloc[i].dropna().astype(str)
 
-    # 文字コード自動判定：UTF-8 → ダメなら Shift-JIS(cp932)
-    for enc in ("utf-8-sig", "cp932", "utf-8"):
-        try:
-            text = content.decode(enc)
+        # 1セルでも非数値（日本語など）があればデータ行ではない
+        if row.apply(lambda x: x.replace('.', '', 1).replace('-', '', 1).isdigit()).all():
+            data_start = i
             break
-        except UnicodeDecodeError:
-            continue
 
-    lines = text.splitlines()
+    if data_start is None:
+        raise ValueError("データ開始行を検出できませんでした（CSVフォーマット不明）")
 
-    # 3行目が「データY,データX」
-    header_line = lines[2]
-    col_names = [c.strip() for c in header_line.split(",") if c.strip()]
-
-    # 4行目以降だけをデータとして読み込む
-    data_text = "\n".join(lines[3:])
-
-    df_data = pd.read_csv(
-        io.StringIO(data_text),
-        header=None,
-        names=col_names,
+    # 本番読み込み（データ行から下全部）
+    df = pd.read_csv(
+        file,
+        encoding="shift_jis",
+        skiprows=data_start,
+        header=None
     )
 
-    # 数値に変換
-    df_data = df_data.astype(float)
+    # EddyHLの2ch CSVは常に Y, X の2列として扱う
+    if df.shape[1] < 2:
+        raise ValueError("データ列数が不足しています（2列必要）")
 
-    return df_data
+    df = df.iloc[:, :2]         # 念のため前2列だけ使う
+    df.columns = ["データY", "データX"]
+
+    return df
 
 
 if uploaded_file is not None:
