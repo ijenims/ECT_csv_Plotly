@@ -2,6 +2,7 @@ import io
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
+import re
 
 # ページ設定
 st.set_page_config(page_title="CSV Viewer", layout="wide")
@@ -13,30 +14,50 @@ st.write("EddyHLで作成したCSVファイルをアップロードすると、�
 uploaded_file = st.file_uploader("CSVファイルを選択", type=["csv"])
 
 
-def load_csv(file):
-    """
-    EddyHL形式のCSVを自動解析して読み込む。
-    ・Shift-JIS対応
-    ・ヘッダ行数が可変でもOK（数値行を自動検出）
-    """
-    # まず先頭10行だけ読む
-    head = pd.read_csv(file, encoding="shift_jis", nrows=10, header=None)
+# 🔍 数値判定（空文字・不可視文字・記号排除）
+def is_number(s):
+    s = str(s).strip()
+    # 正の数 / 負の数 / 小数 を許可
+    return bool(re.fullmatch(r"-?\d+(\.\d+)?", s))
 
-    data_start = None
 
-    # 数値行の検出
+# 🔍 ヘッダ行数を自動検出
+def detect_data_start(head):
+    """
+    先頭の10行くらいを見て、
+    「全セルが純粋な数値」の行をデータ開始とみなす。
+    """
     for i in range(len(head)):
         row = head.iloc[i].dropna().astype(str)
 
-        # 1セルでも非数値（日本語など）があればデータ行ではない
-        if row.apply(lambda x: x.replace('.', '', 1).replace('-', '', 1).isdigit()).all():
-            data_start = i
-            break
+        # 1セルでも非数値ならヘッダ扱い
+        if len(row) == 0:
+            continue
+
+        if all(is_number(x) for x in row):
+            return i
+
+    return None
+
+
+# 🔥 メインのCSV読み込み関数
+def load_csv(file):
+    """
+    EddyHL形式のCSVを安全に読み込む。
+    ・Shift-JIS対応
+    ・ヘッダ行数が変動してもOK
+    ・数値行自動検出で両フォーマットに完全対応
+    """
+    # まず先頭10行だけ読む（Shift-JIS前提）
+    head = pd.read_csv(file, encoding="shift_jis", nrows=10, header=None)
+
+    # データ開始行を推定
+    data_start = detect_data_start(head)
 
     if data_start is None:
         raise ValueError("データ開始行を検出できませんでした（CSVフォーマット不明）")
 
-    # 本番読み込み（データ行から下全部）
+    # 本番データの読み込み
     df = pd.read_csv(
         file,
         encoding="shift_jis",
@@ -44,11 +65,11 @@ def load_csv(file):
         header=None
     )
 
-    # EddyHLの2ch CSVは常に Y, X の2列として扱う
+    # EddyHLは基本2列（Y, X）
     if df.shape[1] < 2:
-        raise ValueError("データ列数が不足しています（2列必要）")
+        raise ValueError("データ列が2列未満です（壊れたCSVの可能性）")
 
-    df = df.iloc[:, :2]         # 念のため前2列だけ使う
+    df = df.iloc[:, :2]
     df.columns = ["データY", "データX"]
 
     return df
