@@ -21,48 +21,31 @@ def is_number(s):
 
 
 def load_csv(file):
-    """
-    EddyHL CSV のヘッダ行数が可変でも確実にデータ開始行を検出する。
-    データ行＝「2列とも純粋な数値行」
-    """
+    # CSV をテキストとして読み込む
+    raw = file.getvalue().decode("shift_jis", errors="ignore").splitlines()
 
-    # まず先頭20行を読む（ヘッダの可能性のある部分）
-    head = pd.read_csv(file, encoding="shift_jis", nrows=20, header=None)
+    # --- フォーマット判定 ---
+    # 3 行ヘッダ or 4 行ヘッダのどちらかなので、
+    # 数値データの行を探してそこまで skiprows にする。
 
     data_start = None
-
-    for i in range(len(head)):
-        row = head.iloc[i]
-
-        # 欠損は除外
-        row = row.dropna().astype(str)
-
-        # セルが2つ未満 → データ行ではない
-        if len(row) < 2:
-            continue
-
-        # 2列とも純粋な数値ならデータ行
-        if is_number(row.iloc[0]) and is_number(row.iloc[1]):
+    for i, line in enumerate(raw):
+        # 数値行の判定：先頭が数字 or '-' で始まり、カンマが含まれる
+        if line.strip().startswith(("-", "0", "1", "2", "3", "4", "5", "6", "7", "8", "9")) and "," in line:
             data_start = i
             break
 
     if data_start is None:
-        raise ValueError("データ開始行を検出できませんでした（フォーマット不明）")
+        raise ValueError("データ部が見つからんかったで…")
 
-    # 本番読み込み
+    # --- 読み込み ---
     df = pd.read_csv(
-        file,
-        encoding="shift_jis",
-        skiprows=data_start,
-        header=None
+        io.StringIO("\n".join(raw[data_start:])),
+        header=None,
+        names=["Y", "X"],
     )
 
-    # データは前2列だけ使う
-    df = df.iloc[:, :2]
-    df.columns = ["データY", "データX"]
-
     return df
-
 
 
 if uploaded_file is not None:
